@@ -1,0 +1,7 @@
+{
+  "name": "com.hatake.mapeditorsystem",
+  "version": "1.0.0",
+  "displayName": "Map Editor System",
+  "description": "汎用グリッドマップ作成システム",
+  "unity": "6000.4.9f1"
+}
