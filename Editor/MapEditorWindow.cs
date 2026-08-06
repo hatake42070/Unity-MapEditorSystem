@@ -10,6 +10,9 @@ namespace MapEditorSystem.Editor
         // ウィンドウにセットするデータ
         private MapData _currentMapData;
         private TilePalette _currentPalette;
+        
+        // 現在選択されているブロックの番号（0からスタート）
+        private int _selectedTileIndex = 0;
 
         // Unityの上部メニューに「MapEditor > Open Window」を追加する魔法の属性
         [MenuItem("MapEditor/Open Window")]
@@ -114,8 +117,9 @@ namespace MapEditorSystem.Editor
                             // 普通の左クリック（ペイントモード）
                             else 
                             {
-                                // 今は仮で「1」を保存。（パレットの0番目のアイテムを意味する）
-                                _currentMapData.baseTiles[index] = 1; 
+                                // 選択されているブロックの「tileID」を取得して保存する！
+                                int selectedID = _currentPalette.baseTiles[_selectedTileIndex].tileID;
+                                _currentMapData.baseTiles[index] = selectedID;
                             }
 
                             // MapDataのScriptableObjectに値を保存
@@ -166,7 +170,31 @@ namespace MapEditorSystem.Editor
             {
                 EditorGUILayout.HelpBox("準備完了！シーンビューで編集できます。", MessageType.Info);
 
-                // TODO: ここに後で「塗るブロックを選ぶボタン」などを追加します
+                // パレットからブロックを選ぶUI（ボタン）
+                GUILayout.Label("🎨 塗るブロックを選択", EditorStyles.boldLabel);
+                
+                // パレットに登録されているbaseTilesの数だけボタンを自動生成する
+                if (_currentPalette.baseTiles != null && _currentPalette.baseTiles.Count > 0)
+                {
+                    // 1. プルダウンに表示する「文字のリスト（配列）」を準備する
+                    string[] displayOptions = new string[_currentPalette.baseTiles.Count];
+    
+                    for (int i = 0; i < displayOptions.Length; i++)
+                    {
+                        TileInfo info = _currentPalette.baseTiles[i];
+                        string displayName = string.IsNullOrEmpty(info.tileName) ? "名称未設定" : info.tileName;
+        
+                        // 配列に表示名をセットする
+                        displayOptions[i] = $"{displayName} (ID:{info.tileID})";
+                    }
+
+                    // 2. プルダウンを表示し、選ばれたインデックスを _selectedTileIndex に代入する
+                    _selectedTileIndex = EditorGUILayout.Popup("🖌️ 塗るブロック", _selectedTileIndex, displayOptions);
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("TilePalette に BaseTiles が登録されていません。", MessageType.Warning);
+                }
             }
         }
     }
