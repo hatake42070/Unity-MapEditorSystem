@@ -39,6 +39,31 @@ namespace MapEditorSystem.Editor
             // キャンバスがセットされていない時は何もしない
             if (_currentMapData == null) return;
 
+            float gridSize = _currentMapData.gridSize;
+
+            // 塗られているマスに色を付ける処理
+            if (_currentMapData.baseTiles != null)
+            {
+                // 配列の最初から最後まで順番にチェックする
+                for (int i = 0; i < _currentMapData.baseTiles.Length; i++)
+                {
+                    int tileID = _currentMapData.baseTiles[i];
+                    if (tileID > 0) // 何か塗られていたら
+                    {
+                        // 配列のインデックスから、2Dのグリッド座標に変換する
+                        int x = i % _currentMapData.mapSize.x;
+                        int y = i / _currentMapData.mapSize.x;
+
+                        // 実際の3D空間の座標に戻す
+                        Vector3 tilePos = new Vector3(x * gridSize, 0, y * gridSize);
+
+                        // 半透明の緑色で、マス目の中心に円を描画して「塗られている感」を出す
+                        Handles.color = new Color(0.0f, 1.0f, 0.0f, 0.3f);
+                        Handles.DrawSolidDisc(tilePos, Vector3.up, gridSize * 0.45f);
+                    }
+                }
+            }
+
             // 1. マウスカーソルの位置から、画面の奥に向かって放つ「見えない光線（Ray）」を作る
             Event e = Event.current;
             Ray ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
@@ -51,7 +76,6 @@ namespace MapEditorSystem.Editor
                 Vector3 hitPoint = ray.GetPoint(enter);
 
                 // 3. グリッド（3x3）にピタッと吸い付くように座標を計算する（四捨五入）
-                float gridSize = _currentMapData.gridSize;
                 int gridX = Mathf.RoundToInt(hitPoint.x / gridSize);
                 int gridY = Mathf.RoundToInt(hitPoint.z / gridSize); // 3D空間なので奥行きはZ軸
 
@@ -62,7 +86,48 @@ namespace MapEditorSystem.Editor
                 Handles.color = Color.red;
                 Handles.DrawWireCube(snappedPos, new Vector3(gridSize, 0.1f, gridSize));
 
-                // 5. マウスが動くたびにシーンビューを強制的に再描画して、カーソルを滑らかに動かす
+                // 5. グリッドの座標（gridX, gridY）が、マップの範囲内かチェックする
+                if (gridX >= 0 && gridX < _currentMapData.mapSize.x &&
+                    gridY >= 0 && gridY < _currentMapData.mapSize.y)
+                {
+                    // マウスの左ボタンが押されているか、またはドラッグ中かチェック
+                    if (e.type == EventType.MouseDown || e.type == EventType.MouseDrag)
+                    {
+                        if (e.button == 0) // 左クリック
+                        {
+                            // 地形配列のindex = X + (Y * 横幅): 1次元配列のインデックスを計算
+                            int index = gridX + (gridY * _currentMapData.mapSize.x);
+
+                            // 配列がまだ作られていなければ生成する
+                            if (_currentMapData.baseTiles == null ||
+                                _currentMapData.baseTiles.Length != _currentMapData.mapSize.x * _currentMapData.mapSize.y)
+                            {
+                                _currentMapData.baseTiles = new int[_currentMapData.mapSize.x * _currentMapData.mapSize.y];
+                            }
+                            
+                            // Shiftキーを押しながら左クリック（消しゴムモード）
+                            if (e.shift) 
+                            {
+                                // 0 は「空（何もない）」として保存
+                                _currentMapData.baseTiles[index] = 0; 
+                            }
+                            // 普通の左クリック（ペイントモード）
+                            else 
+                            {
+                                // 今は仮で「1」を保存。（パレットの0番目のアイテムを意味する）
+                                _currentMapData.baseTiles[index] = 1; 
+                            }
+
+                            // MapDataのScriptableObjectに値を保存
+                            EditorUtility.SetDirty(_currentMapData);
+
+                            // マウスイベントを消費して、シーンビューの他の操作（選択など）を無効化する
+                            e.Use();
+                        }
+                    }
+                }
+
+                // 6. マウスが動くたびにシーンビューを強制的に再描画して、カーソルを滑らかに動かす
                 sceneView.Repaint();
             }
         }
@@ -76,17 +141,17 @@ namespace MapEditorSystem.Editor
 
             // MapDataをドラッグ＆ドロップでセットする枠
             _currentMapData = (MapData)EditorGUILayout.ObjectField(
-                "Map Data (キャンバス)", 
-                _currentMapData, 
-                typeof(MapData), 
+                "Map Data (キャンバス)",
+                _currentMapData,
+                typeof(MapData),
                 false // シーン上のオブジェクトではなく、プロジェクト内のアセットのみ許可
             );
 
             // TilePaletteをドラッグ＆ドロップでセットする枠
             _currentPalette = (TilePalette)EditorGUILayout.ObjectField(
-                "Tile Palette (絵の具)", 
-                _currentPalette, 
-                typeof(TilePalette), 
+                "Tile Palette (絵の具)",
+                _currentPalette,
+                typeof(TilePalette),
                 false
             );
 
@@ -100,7 +165,7 @@ namespace MapEditorSystem.Editor
             else
             {
                 EditorGUILayout.HelpBox("準備完了！シーンビューで編集できます。", MessageType.Info);
-            
+
                 // TODO: ここに後で「塗るブロックを選ぶボタン」などを追加します
             }
         }

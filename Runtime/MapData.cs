@@ -24,7 +24,7 @@ namespace MapEditorSystem.Runtime
     
         [Header("Layer 1: Base Terrain")]
         // 地形用：mapSize.x * mapSize.y の長さになる1次元配列
-        [HideInInspector]
+        //[HideInInspector]
         public int[] baseTiles;
 
         [Header("Layer 2: Placed Objects")]
