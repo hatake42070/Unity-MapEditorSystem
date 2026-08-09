@@ -53,6 +53,14 @@ namespace MapEditorSystem.Editor
                     int tileID = _currentMapData.baseTiles[i];
                     if (tileID > 0) // 何か塗られていたら
                     {
+                        // パレットの中から、tileIDと一致するTileInfoを探す(一致するIDが見つからなかったら、t.tileID=0となる)
+                        TileInfo info = _currentPalette.baseTiles.Find(t => t.tileID == tileID);
+
+                        Color drawColor = info.tileID != 0 ? info.editorColor : Color.white;
+                        
+                        // 半透明にする
+                        drawColor.a = 0.4f;
+                         
                         // 配列のインデックスから、2Dのグリッド座標に変換する
                         int x = i % _currentMapData.mapSize.x;
                         int y = i / _currentMapData.mapSize.x;
@@ -60,9 +68,19 @@ namespace MapEditorSystem.Editor
                         // 実際の3D空間の座標に戻す
                         Vector3 tilePos = new Vector3(x * gridSize, 0, y * gridSize);
 
-                        // 半透明の緑色で、マス目の中心に円を描画して「塗られている感」を出す
-                        Handles.color = new Color(0.0f, 1.0f, 0.0f, 0.3f);
-                        Handles.DrawSolidDisc(tilePos, Vector3.up, gridSize * 0.45f);
+                        // グリッドサイズの「塗りつぶされた四角形（Cube）」を描画する
+                        Handles.color = drawColor;
+                        // DrawSolidRectangleWithOutline: 中身が塗られた四角形
+                        Vector3[] verts = new Vector3[]
+                        {
+                            tilePos + new Vector3(-gridSize/2, 0, -gridSize/2), // 左下
+                            tilePos + new Vector3(-gridSize/2, 0,  gridSize/2), // 左上
+                            tilePos + new Vector3( gridSize/2, 0,  gridSize/2), // 右上
+                            tilePos + new Vector3( gridSize/2, 0, -gridSize/2)  // 右下
+                        };
+            
+                        // 中身の色、枠線の色（少し濃くする）
+                        Handles.DrawSolidRectangleWithOutline(verts, drawColor, new Color(drawColor.r, drawColor.g, drawColor.b, 1.0f));
                     }
                 }
             }
