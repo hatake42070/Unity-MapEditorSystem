@@ -11,9 +11,20 @@ namespace MapEditorSystem.Editor
         private MapData _currentMapData;
         private TilePalette _currentPalette;
         
-        // 現在選択されているブロックの番号（0からスタート）
-        private int _selectedTileIndex = 0;
+        // 編集モードを管理する仕組み
+        private enum EditMode
+        {
+            Terrain, // 地形モード
+            Object   // オブジェクトモード
+        }
 
+        private EditMode _currentMode = EditMode.Terrain;
+        
+        // 地形用とオブジェクト用で、別々に「選択中の番号」を記憶する
+        private int _selectedTileIndex = 0;
+        private int _selectedObjectIndex = 0;
+        
+        // ---------------------------------------------------------------------
         // Unityの上部メニューに「MapEditor > Open Window」を追加する魔法の属性
         [MenuItem("MapEditor/Open Window")]
         public static void ShowWindow()
@@ -178,41 +189,61 @@ namespace MapEditorSystem.Editor
             );
 
             EditorGUILayout.Space();
-
-            // データのセット状況によって親切なメッセージを出す
-            if (_currentMapData == null || _currentPalette == null)
+            // モード切り替えタブの追加
+            string[] modeLabels = {"地形モード", "オブジェクトモード"};
+            // GUILayout.Toolbar: タブのようなUIを作る。選択中のタブのインデックスを返す
+            _currentMode = (EditMode)GUILayout.Toolbar((int)_currentMode, modeLabels); // 引数１: 現在の番号、引数2: ボタンの文字配列
+            EditorGUILayout.Space();
+            
+            // 現在のモードに合わせて、表示するUIを分岐させる
+            if (_currentMode == EditMode.Terrain)
             {
-                EditorGUILayout.HelpBox("MapData と TilePalette を両方セットしてください。", MessageType.Warning);
+                DrawTerrainUI(); // 地形用UIを描画
+            }
+            else if (_currentMode == EditMode.Object)
+            {
+                DrawObjectUI();  // オブジェクト用UIを描画
+            }
+        }
+        
+        // 地形用のプルダウン描画メソッド
+        private void DrawTerrainUI()
+        {
+            if (_currentPalette.baseTiles != null && _currentPalette.baseTiles.Count > 0)
+            {
+                string[] displayOptions = new string[_currentPalette.baseTiles.Count];
+                for (int i = 0; i < displayOptions.Length; i++)
+                {
+                    TileInfo info = _currentPalette.baseTiles[i];
+                    string displayName = string.IsNullOrEmpty(info.tileName) ? "名称未設定" : info.tileName;
+                    displayOptions[i] = $"{displayName} (ID:{info.tileID})";
+                }
+                _selectedTileIndex = EditorGUILayout.Popup("🖌️ 塗るブロック", _selectedTileIndex, displayOptions);
             }
             else
             {
-                EditorGUILayout.HelpBox("準備完了！シーンビューで編集できます。", MessageType.Info);
-
-                // パレットからブロックを選ぶUI（ボタン）
-                GUILayout.Label("🎨 塗るブロックを選択", EditorStyles.boldLabel);
-                
-                // パレットに登録されているbaseTilesの数だけボタンを自動生成する
-                if (_currentPalette.baseTiles != null && _currentPalette.baseTiles.Count > 0)
-                {
-                    // 1. プルダウンに表示する「文字のリスト（配列）」を準備する
-                    string[] displayOptions = new string[_currentPalette.baseTiles.Count];
-    
-                    for (int i = 0; i < displayOptions.Length; i++)
-                    {
-                        TileInfo info = _currentPalette.baseTiles[i];
-                        string displayName = string.IsNullOrEmpty(info.tileName) ? "名称未設定" : info.tileName;
+                EditorGUILayout.HelpBox("TilePalette に 地形データが登録されていません。", MessageType.Warning);
+            }
+        }
         
-                        // 配列に表示名をセットする
-                        displayOptions[i] = $"{displayName} (ID:{info.tileID})";
-                    }
-
-                    // 2. プルダウンを表示し、選ばれたインデックスを _selectedTileIndex に代入する
-                    _selectedTileIndex = EditorGUILayout.Popup("🖌️ 塗るブロック", _selectedTileIndex, displayOptions);
-                }
-                else
+        // オブジェクト用のプルダウン描画メソッド
+        private void DrawObjectUI()
+        {
+            if (_currentPalette.placeableObjects != null && _currentPalette.placeableObjects.Count > 0)
+            {
+                string[] displayOptions = new string[_currentPalette.placeableObjects.Count];
+                for (int i = 0; i < displayOptions.Length; i++)
                 {
-                    EditorGUILayout.HelpBox("TilePalette に BaseTiles が登録されていません。", MessageType.Warning);
+                    ObjectInfo info = _currentPalette.placeableObjects[i];
+                    string displayName = string.IsNullOrEmpty(info.objectName) ? "名称未設定" : info.objectName;
+                    displayOptions[i] = $"{displayName} (ID:{info.objectID})";
                 }
+                // こっちは _selectedObjectIndex を使う
+                _selectedObjectIndex = EditorGUILayout.Popup("🍎 置くオブジェクト", _selectedObjectIndex, displayOptions);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("TilePalette に オブジェクトが登録されていません。", MessageType.Warning);
             }
         }
     }

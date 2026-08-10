@@ -37,6 +37,6 @@ namespace MapEditorSystem.Runtime
 
         [Header("Layer 2: オブジェクト用カタログ")]
         [Tooltip("3x6の壁やギミックなど、スタンプのように置くオブジェクト")]
-        public List<ObjectInfo> objects = new List<ObjectInfo>();
+        public List<ObjectInfo> placeableObjects = new List<ObjectInfo>();
     }  
 }
