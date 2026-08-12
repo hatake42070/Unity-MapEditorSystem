@@ -191,6 +191,14 @@ namespace MapEditorSystem.Editor
             EditorGUILayout.Space();
             // モード切り替えタブの追加
             string[] modeLabels = {"地形モード", "オブジェクトモード"};
+            
+            if (_currentMapData == null || _currentPalette == null)
+            {
+                EditorGUILayout.HelpBox("MapData と TilePalette を両方セットしてください。", MessageType.Warning);
+        
+                return;
+            }
+            
             // GUILayout.Toolbar: タブのようなUIを作る。選択中のタブのインデックスを返す
             _currentMode = (EditMode)GUILayout.Toolbar((int)_currentMode, modeLabels); // 引数１: 現在の番号、引数2: ボタンの文字配列
             EditorGUILayout.Space();
