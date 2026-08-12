@@ -51,7 +51,7 @@ namespace MapEditorSystem.Editor
         private void OnSceneGUI(SceneView sceneView)
         {
             // キャンバスがセットされていない時は何もしない
-            if (_currentMapData == null) return;
+            if (_currentMapData == null || _currentPalette == null) return;
 
             float gridSize = _currentMapData.gridSize;
 
