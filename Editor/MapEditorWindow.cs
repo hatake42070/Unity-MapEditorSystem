@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor; // エディタ拡張に必須のネームスペース
 using MapEditorSystem.Runtime;
@@ -8,8 +9,8 @@ namespace MapEditorSystem.Editor
     public class MapEditorWindow : EditorWindow
     {
         // ウィンドウにセットするデータ
-        private MapData _currentMapData;
-        private TilePalette _currentPalette;
+        private MapData _currentMapData = null;
+        private TilePalette _currentPalette = null;
         
         // 編集モードを管理する仕組み
         private enum EditMode
@@ -54,8 +55,20 @@ namespace MapEditorSystem.Editor
             if (_currentMapData == null || _currentPalette == null) return;
 
             float gridSize = _currentMapData.gridSize;
+            int width = _currentMapData.mapSize.x;
+            int height = _currentMapData.mapSize.y;
+            
+            //　マップ全体の輪郭を赤枠で描画
+            Handles.color = Color.red;
+            float half = gridSize / 2f; 
+            Vector3 p1 = new Vector3(-half, 0, -half);
+            Vector3 p2 = new Vector3(width * gridSize - half, 0, -half);
+            Vector3 p3 = new Vector3(width * gridSize - half, 0, height * gridSize - half);
+            Vector3 p4 = new Vector3(-half, 0, height * gridSize - half);
+            Vector3[] mapOutline = { p1, p2, p3, p4, p1 };
+            Handles.DrawPolyLine(mapOutline);
 
-            // 塗られているマスに色を付ける処理
+            // 塗られているマスに色を付ける処理(地形)
             if (_currentMapData.baseTiles != null)
             {
                 // 配列の最初から最後まで順番にチェックする
@@ -95,6 +108,21 @@ namespace MapEditorSystem.Editor
                     }
                 }
             }
+            // オブジェクトの描画(オブジェクト)
+            if (_currentMapData.objects != null)
+            {
+                foreach (var obj in _currentMapData.objects)
+                {
+                    ObjectInfo info = _currentPalette.placeableObjects.Find(o => o.objectID == obj.objectID);
+                    Color drawColor = info.objectID != 0 ? info.editorColor : Color.gray;
+                    
+                    drawColor.a = 1.0f;
+                    Handles.color = drawColor;
+                    // 地形に埋もれないように高さを Y=1.0 に設定して描画
+                    Vector3 objPos = new Vector3(obj.gridPos.x * gridSize, 0.1f, obj.gridPos.y * gridSize);
+                    Handles.DrawSolidDisc(objPos, Vector3.up, gridSize * 0.35f);
+                }
+            }
 
             // 1. マウスカーソルの位置から、画面の奥に向かって放つ「見えない光線（Ray）」を作る
             Event e = Event.current;
@@ -113,6 +141,10 @@ namespace MapEditorSystem.Editor
 
                 // スナップされたワールド座標
                 Vector3 snappedPos = new Vector3(gridX * gridSize, 0, gridY * gridSize);
+                
+                // カーソルの色をモードで変える
+                Handles.color = (_currentMode == EditMode.Terrain) ? Color.cyan : Color.yellow;
+                Handles.DrawWireCube(snappedPos, new Vector3(gridSize, 0.1f, gridSize));
 
                 // 4. シーンビュー上に赤い枠線（カーソル）を描画する
                 Handles.color = Color.red;
@@ -127,28 +159,51 @@ namespace MapEditorSystem.Editor
                     {
                         if (e.button == 0) // 左クリック
                         {
-                            // 地形配列のindex = X + (Y * 横幅): 1次元配列のインデックスを計算
-                            int index = gridX + (gridY * _currentMapData.mapSize.x);
+                            // モードによる処理の分岐
+                            if (_currentMode == EditMode.Terrain)
+                            {
+                                int index = gridX + (gridY * _currentMapData.mapSize.x);
 
-                            // 配列がまだ作られていなければ生成する
-                            if (_currentMapData.baseTiles == null ||
-                                _currentMapData.baseTiles.Length != _currentMapData.mapSize.x * _currentMapData.mapSize.y)
-                            {
-                                _currentMapData.baseTiles = new int[_currentMapData.mapSize.x * _currentMapData.mapSize.y];
+                                if (_currentMapData.baseTiles == null ||
+                                    _currentMapData.baseTiles.Length != _currentMapData.mapSize.x * _currentMapData.mapSize.y)
+                                {
+                                    _currentMapData.baseTiles = new int[_currentMapData.mapSize.x * _currentMapData.mapSize.y];
+                                }
+                                
+                                // shift+左クリックで消去
+                                if (e.shift) 
+                                {
+                                    _currentMapData.baseTiles[index] = 0; 
+                                }
+                                else 
+                                {
+                                    int selectedID = _currentPalette.baseTiles[_selectedTileIndex].tileID;
+                                    _currentMapData.baseTiles[index] = selectedID;
+                                }
                             }
-                            
-                            // Shiftキーを押しながら左クリック（消しゴムモード）
-                            if (e.shift) 
+                            else if (_currentMode == EditMode.Object)
                             {
-                                // 0 は「空（何もない）」として保存
-                                _currentMapData.baseTiles[index] = 0; 
-                            }
-                            // 普通の左クリック（ペイントモード）
-                            else 
-                            {
-                                // 選択されているブロックの「tileID」を取得して保存する！
-                                int selectedID = _currentPalette.baseTiles[_selectedTileIndex].tileID;
-                                _currentMapData.baseTiles[index] = selectedID;
+                                // 古いMapDataだった場合、リストがnullでエラーになるのを防ぐ
+                                if (_currentMapData.objects == null)
+                                {
+                                    _currentMapData.objects = new List<PlacedObject>();
+                                }
+                                
+                                Vector2Int targetPos = new Vector2Int(gridX, gridY);
+                                
+                                // クリックした場所にあるオブジェクトをリストから削除（Shift消去 兼 重複防止）
+                                _currentMapData.objects.RemoveAll(o => o.gridPos == targetPos);
+
+                                // Shiftが押されていなければ、新しいオブジェクトを配置
+                                if (!e.shift)
+                                {
+                                    PlacedObject newObj = new PlacedObject
+                                    {
+                                        objectID = _currentPalette.placeableObjects[_selectedObjectIndex].objectID,
+                                        gridPos = targetPos
+                                    };
+                                    _currentMapData.objects.Add(newObj);
+                                }
                             }
 
                             // MapDataのScriptableObjectに値を保存
