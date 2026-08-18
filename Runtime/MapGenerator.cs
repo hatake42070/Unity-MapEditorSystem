@@ -45,7 +45,7 @@ namespace MapEditorSystem.Runtime
                         }
                     }
                 }
-                // ▼▼ ここから追加：床の巨大コライダーを自動生成 ▼▼
+                // 床の巨大コライダーを自動生成
                 int height = mapData.mapSize.y;
             
                 // 地形をまとめる root オブジェクトに BoxCollider を追加
