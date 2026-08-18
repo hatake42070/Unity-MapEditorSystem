@@ -99,7 +99,7 @@ namespace MapEditorSystem.Runtime
                     }
                 }
             }
-            // ▼▼ 全ての生成が終わった後に、壁のメッシュ結合を実行！ ▼▼
+            // 全ての生成が終わった後に、壁のメッシュ結合を実行
             CombineWallMeshes(objectRoot);
         }
         
@@ -194,7 +194,7 @@ namespace MapEditorSystem.Runtime
                 // 巨大コライダーを持ったオブジェクトをWallとして認識させる
                 root.gameObject.tag = "Wall";
                 
-                // 元のブロックから記憶しておいた「摩擦ゼロ」を巨大コライダーに適用！
+                // 元のブロックから記憶しておいた「摩擦ゼロ」を巨大コライダーに適用
                 if (sharedPhysicMaterial != null)
                 {
                     collider.material = sharedPhysicMaterial;
