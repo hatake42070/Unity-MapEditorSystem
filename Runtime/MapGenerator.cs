@@ -222,6 +222,8 @@ namespace MapEditorSystem.Runtime
                 collider.sharedMesh = finalPhysicsMesh;
                 // 巨大コライダーを持ったオブジェクトをWallとして認識させる
                 root.gameObject.tag = "Wall";
+                // 生成された巨大な壁の「レイヤー」を "Wall" に設定する
+                root.gameObject.layer = LayerMask.NameToLayer("Wall");
                 
                 // 元のブロックから記憶しておいた「摩擦ゼロ」を巨大コライダーに適用
                 if (sharedPhysicMaterial != null)
