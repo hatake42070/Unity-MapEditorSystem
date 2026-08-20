@@ -3,13 +3,16 @@ using System.Collections.Generic; // 辞書(Dictionary)を使うために追加
 
 namespace MapEditorSystem.Runtime 
 {
+    /// <summary>
+    /// MapDataとTilePaletteを受け取り、実際の3Dオブジェクトを生成するクラス
+    /// </summary>
     public static class MapGenerator
     {
         // 1Pと2PのIDを定義
         private const int SPAWN_1P_ID = 101;
         private const int SPAWN_2P_ID = 102;
         
-        // 引数に「out Vector3」を追加して、結果を2つ外に渡せるようにする
+        // 引数に「out Vector3」を追加して、結果を外に渡せるようにする
         public static void GenerateMap(MapData mapData, TilePalette palette, out Vector3 spawn1P, out Vector3 spawn2P, out Vector3 mapCenter)
         {
             spawn1P = Vector3.zero;
@@ -20,12 +23,16 @@ namespace MapEditorSystem.Runtime
 
             float gridSize = mapData.gridSize;
             int width = mapData.mapSize.x;
+            int height = mapData.mapSize.y;
 
             Transform terrainRoot = new GameObject("--- Terrain Root ---").transform;
             Transform objectRoot = new GameObject("--- Object Root ---").transform;
 
             if (mapData.baseTiles != null)
             {
+                // 床のメッシュ結合用のリストを用意
+                List<CombineInstance> floorCombiners = new List<CombineInstance>();
+                
                 for (int i = 0; i < mapData.baseTiles.Length; i++)
                 {
                     int tileID = mapData.baseTiles[i];
@@ -34,42 +41,44 @@ namespace MapEditorSystem.Runtime
                         TileInfo info = palette.baseTiles.Find(t => t.tileID == tileID);
                         if (info.prefab != null)
                         {
+                            // 配列のインデックスから x, y 座標を計算する
                             int x = i % width;
                             int y = i / width;
                             Vector3 pos = new Vector3(x * gridSize, 0, y * gridSize);
                             
                             // 生成したオブジェクトを変数(go)として受け取る
                             GameObject go = Object.Instantiate(info.prefab, pos, Quaternion.identity, terrainRoot);
-                            
                             go.transform.localScale = new Vector3(gridSize, gridSize, gridSize);
+                            
+                            // メッシュ結合用のデータを収集
+                            MeshFilter mf = go.GetComponent<MeshFilter>();
+                            if (mf != null)
+                            {
+                                CombineInstance ci = new CombineInstance();
+                                ci.mesh = mf.sharedMesh;
+                                // terrainRootから見た相対的な位置・回転・スケールを計算して正確に配置
+                                ci.transform = terrainRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                                floorCombiners.Add(ci);
+                            }
+                            
+                            // 個別の床タイルについている不要なコライダーを削除（パフォーマンス最適化と引っかかり防止）
+                            Collider col = go.GetComponent<Collider>();
+                            if (col != null)
+                            {
+                                Object.Destroy(col);
+                            }
                         }
                     }
                 }
-                // 床の巨大コライダーを自動生成
-                int height = mapData.mapSize.y;
-            
-                // 地形をまとめる root オブジェクトに BoxCollider を追加
-                BoxCollider floorCollider = terrainRoot.gameObject.AddComponent<BoxCollider>();
-            
-                // 床の厚みを適当に設定（弾抜け防止のため少し分厚く 1.0f に）
-                float floorThickness = 1.0f;
-            
-                // コライダーのサイズを計算（マスの数 × グリッドの大きさ）
-                float sizeX = width * gridSize;
-                float sizeZ = height * gridSize;
-                floorCollider.size = new Vector3(sizeX, floorThickness, sizeZ);
             
                 // コライダーの中心位置を計算（ブロックの中心が0,0,0からスタートしている前提）
                 float centerX = (width - 1) * gridSize / 2f;
                 float centerZ = (height - 1) * gridSize / 2f;
-                // Yの中心座標の計算（上面が gridSize/2f になるように逆算）
-                float centerY = (gridSize / 2f) - (floorThickness / 2f);
-            
-                // Y軸は、床ブロックの表面が Y=0 だとすると、そこから下に向かって厚みを持たせる
-                floorCollider.center = new Vector3(centerX, centerY, centerZ);
-                
                 // コライダーを作る時に計算した中心座標を代入してあげる
                 mapCenter = new Vector3(centerX, 0, centerZ);
+                
+                // 床の当たり判定を作成するメソッドを呼び出す
+                CreateFloorCollider(terrainRoot, floorCombiners);
             }
 
             if (mapData.objects != null)
@@ -101,6 +110,26 @@ namespace MapEditorSystem.Runtime
             }
             // 全ての生成が終わった後に、壁のメッシュ結合を実行
             CombineWallMeshes(objectRoot);
+        }
+
+        /// <summary>
+        /// 収集した床のメッシュ情報を結合し、継ぎ目のない1枚の当たり判定を作成する
+        /// </summary>
+        private static void CreateFloorCollider(Transform root, List<CombineInstance> combiners)
+        {
+            if (combiners.Count == 0) return;
+
+            // 収集したメッシュを1つに結合する
+            Mesh combinedFloorMesh = new Mesh();
+            combinedFloorMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            combinedFloorMesh.CombineMeshes(combiners.ToArray(), true, true);
+
+            // terrainRoot自身にMeshColliderを追加し、結合したメッシュを割り当てる
+            MeshCollider floorCollider = root.gameObject.AddComponent<MeshCollider>();
+            floorCollider.sharedMesh = combinedFloorMesh;
+            
+            // （任意）床に対してタグを設定したい場合はここで指定できる
+            // root.gameObject.tag = "Floor";
         }
         
         /// <summary>
