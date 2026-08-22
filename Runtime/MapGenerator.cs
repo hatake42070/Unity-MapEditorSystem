@@ -8,10 +8,6 @@ namespace MapEditorSystem.Runtime
     /// </summary>
     public static class MapGenerator
     {
-        // 1Pと2PのIDを定義
-        private const int SPAWN_1P_ID = 101;
-        private const int SPAWN_2P_ID = 102;
-        
         // 引数に「out Vector3」を追加して、結果を外に渡せるようにする
         public static void GenerateMap(MapData mapData, TilePalette palette, out Vector3 spawn1P, out Vector3 spawn2P, out Vector3 mapCenter)
         {
@@ -28,6 +24,7 @@ namespace MapEditorSystem.Runtime
             Transform terrainRoot = new GameObject("--- Terrain Root ---").transform;
             Transform objectRoot = new GameObject("--- Object Root ---").transform;
 
+            // --- 床（Layer 1）の生成 ---
             if (mapData.baseTiles != null)
             {
                 // 床のメッシュ結合用のリストを用意
@@ -50,22 +47,26 @@ namespace MapEditorSystem.Runtime
                             GameObject go = Object.Instantiate(info.prefab, pos, Quaternion.identity, terrainRoot);
                             go.transform.localScale = new Vector3(gridSize, gridSize, gridSize);
                             
-                            // メッシュ結合用のデータを収集
-                            MeshFilter mf = go.GetComponent<MeshFilter>();
-                            if (mf != null)
+                            // 役割がTerrainの場合のみ、メッシュ結合のリストに追加
+                            if (info.role == MapRole.Terrain)
                             {
-                                CombineInstance ci = new CombineInstance();
-                                ci.mesh = mf.sharedMesh;
-                                // terrainRootから見た相対的な位置・回転・スケールを計算して正確に配置
-                                ci.transform = terrainRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
-                                floorCombiners.Add(ci);
-                            }
+                                // メッシュ結合用のデータを収集
+                                MeshFilter mf = go.GetComponent<MeshFilter>();
+                                if (mf != null)
+                                {
+                                    CombineInstance ci = new CombineInstance();
+                                    ci.mesh = mf.sharedMesh;
+                                    // terrainRootから見た相対的な位置・回転・スケールを計算して正確に配置
+                                    ci.transform = terrainRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                                    floorCombiners.Add(ci);
+                                }
                             
-                            // 個別の床タイルについている不要なコライダーを削除（パフォーマンス最適化と引っかかり防止）
-                            Collider col = go.GetComponent<Collider>();
-                            if (col != null)
-                            {
-                                Object.Destroy(col);
+                                // 個別の床タイルについている不要なコライダーを削除（パフォーマンス最適化と引っかかり防止）
+                                Collider col = go.GetComponent<Collider>();
+                                if (col != null)
+                                {
+                                    Object.Destroy(col);
+                                }
                             }
                         }
                     }
@@ -81,35 +82,48 @@ namespace MapEditorSystem.Runtime
                 CreateFloorCollider(terrainRoot, floorCombiners);
             }
 
+            // --- オブジェクト（Layer 2）の生成 ---
             if (mapData.objects != null)
             {
                 foreach (var obj in mapData.objects)
                 {
-                    // 1Pのスポーン地点を見つけた場合
-                    if (obj.objectID == SPAWN_1P_ID)
-                    {
-                        spawn1P = new Vector3(obj.gridPos.x * gridSize, gridSize, obj.gridPos.y * gridSize);
-                        continue; // Prefabは生成しない
-                    }
-                    
-                    // 2Pのスポーン地点を見つけた場合
-                    if (obj.objectID == SPAWN_2P_ID)
-                    {
-                        spawn2P = new Vector3(obj.gridPos.x * gridSize, gridSize, obj.gridPos.y * gridSize);
-                        continue; // Prefabは生成しない
-                    }
-                    
                     ObjectInfo info = palette.placeableObjects.Find(o => o.objectID == obj.objectID);
+                    
+                    // カタログに存在しない場合はスキップ
+                    if (info.objectID == 0) continue; 
+
+                    // 分岐1：スポーンマーカーの場合は、座標を記録するだけで生成しない
+                    if (info.role == MapRole.SpawnMarker)
+                    {
+                        // 今回は分かりやすさのため、オブジェクト名(objectName)で1Pか2Pかを判別
+                        // インスペクターで「1P Spawn」「2P Spawn」という名前に設定する
+                        if (info.objectName.Contains("1P"))
+                        {
+                            spawn1P = new Vector3(obj.gridPos.x * gridSize, gridSize, obj.gridPos.y * gridSize);
+                        }
+                        else if (info.objectName.Contains("2P"))
+                        {
+                            spawn2P = new Vector3(obj.gridPos.x * gridSize, gridSize, obj.gridPos.y * gridSize);
+                        }
+                        continue; // 次のブロックへ
+                    }
+
+                    // 分岐2：プレハブを通常通り生成する（障害物、または動的キャラ）
                     if (info.prefab != null)
                     {
                         Vector3 pos = new Vector3(obj.gridPos.x * gridSize, gridSize, obj.gridPos.y * gridSize);
                         GameObject go = Object.Instantiate(info.prefab, pos, Quaternion.identity, objectRoot);
                         go.transform.localScale = new Vector3(gridSize, gridSize, gridSize);
+                        
+                        // 壁（StaticObstacle）か、動的キャラ（DynamicEntity）かの判断は、
+                        // この後呼ばれる CombineWallMeshes の中で自動的に行われる
                     }
                 }
             }
+            
             // 全ての生成が終わった後に、壁のメッシュ結合を実行
-            CombineWallMeshes(objectRoot);
+            // （引数に palette を追加して、情報を渡すようにします）
+            CombineWallMeshes(objectRoot, palette);
         }
 
         /// <summary>
@@ -135,9 +149,10 @@ namespace MapEditorSystem.Runtime
         /// <summary>
         /// 壁オブジェクトのメッシュを結合し、継ぎ目のない当たり判定を作成する
         /// </summary>
-        private static void CombineWallMeshes(Transform root)
+        private static void CombineWallMeshes(Transform root, TilePalette palette)
         {
-            MeshFilter[] filters = root.GetComponentsInChildren<MeshFilter>();
+            // root(ObjectRoot)以下にある全ての GameObject を取得
+            Transform[] allObjects = root.GetComponentsInChildren<Transform>();
             
             // マテリアルごとにメッシュを分類する辞書
             Dictionary<Material, List<CombineInstance>> materialDic = new Dictionary<Material, List<CombineInstance>>();
@@ -145,36 +160,58 @@ namespace MapEditorSystem.Runtime
             // 元の壁についていた「摩擦ゼロのマテリアル」を記憶するための変数
             PhysicsMaterial sharedPhysicMaterial = null;
 
-            foreach (MeshFilter mf in filters)
+            foreach (Transform t in allObjects)
             {
-                // ※重要※ 画像で確認した「Wall」タグがついているオブジェクトのみを結合する！
-                // これにより、もし今後「宝箱」などを置いても、それが壁に結合されてしまうのを防ぎます。
-                if (!mf.gameObject.CompareTag("Wall")) continue;
+                // 親のroot自身はスキップ
+                if (t == root) continue;
 
-                MeshRenderer mr = mf.GetComponent<MeshRenderer>();
-                if (mr == null || mr.sharedMaterial == null) continue;
+                // 生成されたオブジェクトの名前から、(Clone)という文字を消してプレハブ名に戻す
+                string cleanName = t.name.Replace("(Clone)", "");
+
+                // カタログを検索して、このオブジェクトの役割を調べる
+                ObjectInfo info = palette.placeableObjects.Find(o => o.prefab != null && o.prefab.name == cleanName);
                 
+                // もしカタログにない、または役割が StaticObstacle（壁）以外なら結合しない！（タグ判定は廃止）
+                if (info.prefab == null || info.role != MapRole.StaticObstacle)
+                {
+                    continue; 
+                }
+                
+                // 形データ（MeshFilter）を取得。形を持たない空オブジェクトなどはスキップする
+                MeshFilter mf = t.GetComponent<MeshFilter>();
+                if (mf == null) continue;
+
+                // 見た目データ（MeshRendererとMaterial）を取得。絵の具が塗られていない場合はスキップ
+                MeshRenderer mr = t.GetComponent<MeshRenderer>();
+                if (mr == null || mr.sharedMaterial == null) continue;
+
+                // マテリアルごとに合体させるため、辞書（Dictionary）にグループを作る
                 Material mat = mr.sharedMaterial;
                 if (!materialDic.ContainsKey(mat))
                 {
+                    // まだそのマテリアルのグループがなければ、新しくリスト（合体用データの束）を作成する
                     materialDic[mat] = new List<CombineInstance>();
                 }
-                
+
+                // メッシュ結合用のデータ（CombineInstance）を作成し、形と場所を記録する
                 CombineInstance ci = new CombineInstance();
-                ci.mesh = mf.sharedMesh;
-                // Rootから見た相対的な位置・回転・スケールを計算して正確に配置
+                ci.mesh = mf.sharedMesh; // ブロックの「形」を記録
+                // Root（親オブジェクト）から見た相対的な座標・回転・大きさを計算して、正確な配置場所を記録
                 ci.transform = root.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                // 記録したデータを、同じマテリアルのグループ（リスト）に綴じる
                 materialDic[mat].Add(ci);
 
-                // 摩擦ゼロの物理マテリアルを1つだけ記憶しておく
-                BoxCollider bc = mf.GetComponent<BoxCollider>();
+                // 物理演算用のツルツル素材（摩擦ゼロの PhysicMaterial）を1つだけ抜き出して記憶しておく
+                // （後で完成した巨大な当たり判定に、このツルツル素材を引き継いで貼り付けるため）
+                BoxCollider bc = t.GetComponent<BoxCollider>();
                 if (bc != null && sharedPhysicMaterial == null)
                 {
                     sharedPhysicMaterial = bc.sharedMaterial;
                 }
-                
-                // 結合が終わった元のブロックは不要になるため削除する（処理を軽くするため）
-                Object.Destroy(mf.gameObject);
+
+                // 合体用のデータは全て取り終わったので、元のバラバラのブロックはゲームから完全に消去する
+                // これを消さないと、合体後の巨大な壁と元の壁が重なって描画されてしまい、逆に重くなるため
+                Object.Destroy(t.gameObject);
             }
             
             // 物理判定用の巨大メッシュを作るためのリスト
