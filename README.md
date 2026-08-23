@@ -9,7 +9,7 @@
 
 - **データ駆動型設計 (Data-Driven):** IDとプレハブの紐付けを `TilePalette`（ScriptableObject）で一元管理．
 - **自動メッシュ結合 (Mesh Combining):** 
-  - **床 (Terrain):** 個別のコライダーを統合し、弾の引っかかりのない1枚の巨大なMeshColliderを自動生成．
+  - **床 (Terrain):** 個別のコライダーを統合し、引っかかりのない1枚の巨大なMeshColliderを自動生成．
   - **壁 (StaticObstacle):** マテリアルごとに見た目のメッシュを結合し、ドローコール（描画負荷）を極限まで削減．
 - **オブジェクト自動仕分け:** スポーン位置（1P/2P）の割り出しや、敵・ギミック（DynamicEntity）の動的生成を自動化．
 

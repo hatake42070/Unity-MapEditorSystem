@@ -51,11 +51,11 @@ namespace MapEditorSystem.Runtime
                             if (info.role == MapRole.Terrain)
                             {
                                 // メッシュ結合用のデータを収集
-                                MeshFilter mf = go.GetComponent<MeshFilter>();
+                                MeshFilter mf = go.GetComponent<MeshFilter>(); // MeshFilter: 形状データ（頂点やポリゴン）
                                 if (mf != null)
                                 {
-                                    CombineInstance ci = new CombineInstance();
-                                    ci.mesh = mf.sharedMesh;
+                                    CombineInstance ci = new CombineInstance(); // 1つのパーツをどこにどう置くかという指示書
+                                    ci.mesh = mf.sharedMesh; // shardMesh: インスタンスを作成せず参照する
                                     // terrainRootから見た相対的な位置・回転・スケールを計算して正確に配置
                                     ci.transform = terrainRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
                                     floorCombiners.Add(ci);
@@ -136,7 +136,7 @@ namespace MapEditorSystem.Runtime
             // 収集したメッシュを1つに結合する
             Mesh combinedFloorMesh = new Mesh();
             combinedFloorMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            combinedFloorMesh.CombineMeshes(combiners.ToArray(), true, true);
+            combinedFloorMesh.CombineMeshes(combiners.ToArray(), true, true); // 1つの巨大なメッシュデータを生成
 
             // terrainRoot自身にMeshColliderを追加し、結合したメッシュを割り当てる
             MeshCollider floorCollider = root.gameObject.AddComponent<MeshCollider>();

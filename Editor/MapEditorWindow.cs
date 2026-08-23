@@ -26,7 +26,7 @@ namespace MapEditorSystem.Editor
         private int _selectedObjectIndex = 0;
         
         // ---------------------------------------------------------------------
-        // Unityの上部メニューに「MapEditor > Open Window」を追加する魔法の属性
+        // Unityの上部メニューに「MapEditor > Open Window」を追加する属性
         [MenuItem("MapEditor/Open Window")]
         public static void ShowWindow()
         {
@@ -51,7 +51,7 @@ namespace MapEditorSystem.Editor
         // シーンビュー上にGUIを描画する（シーンビュー上でマウスが動くたびに呼ばれる）
         private void OnSceneGUI(SceneView sceneView)
         {
-            // キャンバスがセットされていない時は何もしない
+            // マップデータ、パレットがセットされていない時は何もしない
             if (_currentMapData == null || _currentPalette == null) return;
 
             float gridSize = _currentMapData.gridSize;
@@ -61,10 +61,10 @@ namespace MapEditorSystem.Editor
             //　マップ全体の輪郭を赤枠で描画
             Handles.color = Color.red;
             float half = gridSize / 2f; 
-            Vector3 p1 = new Vector3(-half, 0, -half);
-            Vector3 p2 = new Vector3(width * gridSize - half, 0, -half);
-            Vector3 p3 = new Vector3(width * gridSize - half, 0, height * gridSize - half);
-            Vector3 p4 = new Vector3(-half, 0, height * gridSize - half);
+            Vector3 p1 = new Vector3(-half, 0, -half); // 左下
+            Vector3 p2 = new Vector3(width * gridSize - half, 0, -half); // 右下
+            Vector3 p3 = new Vector3(width * gridSize - half, 0, height * gridSize - half); // 右上
+            Vector3 p4 = new Vector3(-half, 0, height * gridSize - half); // 左上
             Vector3[] mapOutline = { p1, p2, p3, p4, p1 };
             Handles.DrawPolyLine(mapOutline);
 
