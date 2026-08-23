@@ -23,7 +23,7 @@ namespace MapEditorSystem.Runtime
         public float gridSize = 3.0f; // 戦車ゲームではこれを 3 に設定する
     
         [Header("Layer 1: Base Terrain")]
-        // 地形用：mapSize.x * mapSize.y の長さになる1次元配列
+        // 地形用：mapSize.x * mapSize.y の長さになる1次元配列、中に入るのは tileID
         //[HideInInspector]
         public int[] baseTiles;
 
