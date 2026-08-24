@@ -50,20 +50,40 @@ namespace MapEditorSystem.Runtime
                             // 役割がTerrainの場合のみ、メッシュ結合のリストに追加
                             if (info.role == MapRole.Terrain)
                             {
-                                // メッシュ結合用のデータを収集
-                                MeshFilter mf = go.GetComponent<MeshFilter>(); // MeshFilter: 形状データ（頂点やポリゴン）
-                                if (mf != null)
+                                MeshFilter[] allMeshFilters = go.GetComponentsInChildren<MeshFilter>();
+                                bool hasCustomCollider = false;
+
+                                // 事前チェック：透明なモデルがあるか？
+                                foreach (MeshFilter mf in allMeshFilters)
                                 {
-                                    CombineInstance ci = new CombineInstance(); // 1つのパーツをどこにどう置くかという指示書
-                                    ci.mesh = mf.sharedMesh; // shardMesh: インスタンスを作成せず参照する
-                                    // terrainRootから見た相対的な位置・回転・スケールを計算して正確に配置
-                                    ci.transform = terrainRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
-                                    floorCombiners.Add(ci);
+                                    MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+                                    if (mr == null || !mr.enabled) hasCustomCollider = true;
                                 }
-                            
-                                // 個別の床タイルについている不要なコライダーを削除（パフォーマンス最適化と引っかかり防止）
-                                Collider col = go.GetComponent<Collider>();
-                                if (col != null)
+
+                                // 床の物理判定リスト（floorCombiners）に登録する
+                                foreach (MeshFilter mf in allMeshFilters)
+                                {
+                                    MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+        
+                                    CombineInstance ci = new CombineInstance();
+                                    ci.mesh = mf.sharedMesh;
+                                    ci.transform = terrainRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+
+                                    // 透明なモデルなら登録
+                                    if (mr == null || !mr.enabled)
+                                    {
+                                        floorCombiners.Add(ci);
+                                    }
+                                    // 絵があって、かつ専用の透明モデルが無い場合も登録
+                                    else if (!hasCustomCollider)
+                                    {
+                                        floorCombiners.Add(ci);
+                                    }
+                                }
+
+                                // 不要なコライダーの削除（※子オブジェクトのものも全て削除）
+                                Collider[] cols = go.GetComponentsInChildren<Collider>();
+                                foreach (Collider col in cols)
                                 {
                                     Object.Destroy(col);
                                 }
@@ -151,22 +171,19 @@ namespace MapEditorSystem.Runtime
         /// </summary>
         private static void CombineWallMeshes(Transform root, TilePalette palette)
         {
-            // root(ObjectRoot)以下にある全ての GameObject を取得
-            Transform[] allObjects = root.GetComponentsInChildren<Transform>();
-            
             // マテリアルごとにメッシュを分類する辞書
             Dictionary<Material, List<CombineInstance>> materialDic = new Dictionary<Material, List<CombineInstance>>();
+            
+            // 物理判定「透明キューブなど」のメッシュを結合するためのリスト
+            List<CombineInstance> physicsCombiners = new List<CombineInstance>();
             
             // 元の壁についていた「摩擦ゼロのマテリアル」を記憶するための変数
             PhysicsMaterial sharedPhysicMaterial = null;
 
-            foreach (Transform t in allObjects)
+            foreach (Transform blockPrefab in root)
             {
-                // 親のroot自身はスキップ
-                if (t == root) continue;
-
                 // 生成されたオブジェクトの名前から、(Clone)という文字を消してプレハブ名に戻す
-                string cleanName = t.name.Replace("(Clone)", "");
+                string cleanName = blockPrefab.name.Replace("(Clone)", "");
 
                 // カタログを検索して、このオブジェクトの役割を調べる
                 ObjectInfo info = palette.placeableObjects.Find(o => o.prefab != null && o.prefab.name == cleanName);
@@ -176,46 +193,60 @@ namespace MapEditorSystem.Runtime
                 {
                     continue; 
                 }
+                // 親子両方の MeshFilter を配列で取得
+                MeshFilter[] allMeshFilters = blockPrefab.GetComponentsInChildren<MeshFilter>();
                 
-                // 形データ（MeshFilter）を取得。形を持たない空オブジェクトなどはスキップする
-                MeshFilter mf = t.GetComponent<MeshFilter>();
-                if (mf == null) continue;
-
-                // 見た目データ（MeshRendererとMaterial）を取得。絵の具が塗られていない場合はスキップ
-                MeshRenderer mr = t.GetComponent<MeshRenderer>();
-                if (mr == null || mr.sharedMaterial == null) continue;
-
-                // マテリアルごとに合体させるため、辞書（Dictionary）にグループを作る
-                Material mat = mr.sharedMaterial;
-                if (!materialDic.ContainsKey(mat))
+                // このプレハブの中に「透明なモデル」が1つでも存在するかを事前にチェック！
+                bool hasCustomCollider = false;
+                foreach (MeshFilter mf in allMeshFilters)
                 {
-                    // まだそのマテリアルのグループがなければ、新しくリスト（合体用データの束）を作成する
-                    materialDic[mat] = new List<CombineInstance>();
+                    MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+                    if (mr == null || !mr.enabled) hasCustomCollider = true;
                 }
 
-                // メッシュ結合用のデータ（CombineInstance）を作成し、形と場所を記録する
-                CombineInstance ci = new CombineInstance();
-                ci.mesh = mf.sharedMesh; // ブロックの「形」を記録
-                // Root（親オブジェクト）から見た相対的な座標・回転・大きさを計算して、正確な配置場所を記録
-                ci.transform = root.worldToLocalMatrix * mf.transform.localToWorldMatrix;
-                // 記録したデータを、同じマテリアルのグループ（リスト）に綴じる
-                materialDic[mat].Add(ci);
-
-                // 物理演算用のツルツル素材（摩擦ゼロの PhysicMaterial）を1つだけ抜き出して記憶しておく
-                // （後で完成した巨大な当たり判定に、このツルツル素材を引き継いで貼り付けるため）
-                BoxCollider bc = t.GetComponent<BoxCollider>();
-                if (bc != null && sharedPhysicMaterial == null)
+                // 透明モデルを含むかのチェック結果に基づいて振り分ける
+                foreach (MeshFilter mf in allMeshFilters)
                 {
-                    sharedPhysicMaterial = bc.sharedMaterial;
+                    // 見た目データ（MeshRendererとMaterial）を取得。絵の具が塗られていない場合はスキップ
+                    MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+                    
+                    // メッシュ結合用のデータ（CombineInstance）を作成し、形と場所を記録する
+                    CombineInstance ci = new CombineInstance();
+                    ci.mesh = mf.sharedMesh; // ブロックの「形」を記録
+                    // Root（親オブジェクト）から見た相対的な座標・回転・大きさを計算して、正確な配置場所を記録
+                    ci.transform = root.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                    
+                    // 分岐１； 透明なモデルなら、物理リストに入れる
+                    if (mr == null || !mr.enabled)
+                    {
+                        physicsCombiners.Add(ci);
+            
+                        BoxCollider bc = mf.GetComponent<BoxCollider>();
+                        if (bc != null && sharedPhysicMaterial == null) sharedPhysicMaterial = bc.sharedMaterial;
+                    }
+                    // 分岐２；絵がある（オンになっている）場合
+                    else
+                    {
+                        // 見た目リストに入れる
+                        Material mat = mr.sharedMaterial;
+                        if (!materialDic.ContainsKey(mat))
+                        {
+                            materialDic[mat] = new List<CombineInstance>();
+                        }
+                        materialDic[mat].Add(ci);
+                        
+                        // もし「透明なモデル」が存在しないブロックなら、この絵があるモデルを物理リストにも入れる！（自動フォールバック）
+                        if (!hasCustomCollider)
+                        {
+                            physicsCombiners.Add(ci);
+                        }
+                    }
                 }
 
                 // 合体用のデータは全て取り終わったので、元のバラバラのブロックはゲームから完全に消去する
                 // これを消さないと、合体後の巨大な壁と元の壁が重なって描画されてしまい、逆に重くなるため
-                Object.Destroy(t.gameObject);
+                Object.Destroy(blockPrefab.gameObject);
             }
-            
-            // 物理判定用の巨大メッシュを作るためのリスト
-            List<CombineInstance> physicsCombiners = new List<CombineInstance>();
             
             // マテリアルごとに「見た目」のオブジェクトを生成
             foreach (var kvp in materialDic)
