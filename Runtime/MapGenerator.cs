@@ -9,20 +9,25 @@ namespace MapEditorSystem.Runtime
     public static class MapGenerator
     {
         // 引数に「out Vector3」を追加して、結果を外に渡せるようにする
-        public static void GenerateMap(MapData mapData, TilePalette palette, out Vector3 spawn1P, out Vector3 spawn2P, out Vector3 mapCenter)
+        public static GameObject GenerateMap(MapData mapData, TilePalette palette, out Vector3 spawn1P, out Vector3 spawn2P, out Vector3 mapCenter)
         {
             spawn1P = Vector3.zero;
             spawn2P = Vector3.zero;
             mapCenter = Vector3.zero;
-            
-            if (mapData == null || palette == null) return;
+
+            if (mapData == null || palette == null) return null;
 
             float gridSize = mapData.gridSize;
             int width = mapData.mapSize.x;
             int height = mapData.mapSize.y;
+            
+            // マップ全体をまとめる空の親オブジェクトを作成
+            GameObject mapRoot = new GameObject("MapInstance_" + mapData.name);
 
             Transform terrainRoot = new GameObject("--- Terrain Root ---").transform;
+            terrainRoot.SetParent(mapRoot.transform);
             Transform objectRoot = new GameObject("--- Object Root ---").transform;
+            objectRoot.SetParent(mapRoot.transform);
 
             // --- 床（Layer 1）の生成 ---
             if (mapData.baseTiles != null)
@@ -144,6 +149,9 @@ namespace MapEditorSystem.Runtime
             // 全ての生成が終わった後に、壁のメッシュ結合を実行
             // （引数に palette を追加して、情報を渡すようにします）
             CombineWallMeshes(objectRoot, palette);
+            
+            // 最後に、全てが格納された親オブジェクト(mapRoot)を返す
+            return mapRoot;
         }
 
         /// <summary>
