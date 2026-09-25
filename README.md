@@ -3,6 +3,10 @@
 個人用3Dゲーム制作のための、軽量かつ柔軟なカスタムマップエディタ＆ジェネレーターパッケージです．
 二次元配列（MapData）とカタログ（TilePalette）を組み合わせることで、コードを一切書き換えることなく、新しいブロックやギミックを自由に追加できます．
 
+<img width="1099" height="617" alt="スクリーンショット 2026-09-25 102904" src="https://github.com/user-attachments/assets/920e2bd1-d8e7-4323-8ead-c9174608e0df" />
+<img width="1164" height="662" alt="スクリーンショット 2026-09-25 102744" src="https://github.com/user-attachments/assets/e4ed8c9d-cf3f-46eb-88f1-b753a7d312b1" />
+
+
 ---
 
 ## 🌟 主な機能
